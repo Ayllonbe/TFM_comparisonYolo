@@ -1,0 +1,552 @@
+schema: '2.0'
+stages:
+  resize_dataset:
+    cmd: python3 src/image_processing/ImageLoader.py  --images_path dataset --target_path
+      train_dataset/data --max_size 1250  && python3 src/utils/copy_data_collections.py
+      --dataset_path dataset --target_path train_dataset/data --subfolder "labels"
+    deps:
+    - path: dataset
+      hash: md5
+      md5: e0899afe0d041a3e634fc0f93c130c82.dir
+      size: 8611177498
+      nfiles: 4643
+    - path: src/image_processing/ImageLoader.py
+      hash: md5
+      md5: 40f87b06320e9daba818ac596a44b534
+      size: 12636
+    - path: src/utils/copy_data_collections.py
+      hash: md5
+      md5: 94b15a9c650e139637911a5f6f015c46
+      size: 1310
+    params:
+      params.yaml:
+        data:
+          dataset_path: dataset
+          target_path: train_dataset/data
+          max_image_size: 1250
+          tile_size:
+          - 640
+          - 640
+          tile_stride:
+          - 320
+          - 320
+          pad_borders: true
+    outs:
+    - path: train_dataset/data
+      hash: md5
+      md5: 5619a108fc12997ee36a50d0849249d2.dir
+      size: 1158872775
+      nfiles: 3068
+  split_dataset:
+    cmd: for dir in `find train_dataset/data/* -maxdepth 1 -mindepth 1 -type d`; do
+      echo "Splitting trial - $dir"; python3 src/train/split_datasets.py --target_path
+      train_dataset --images_folder images --labels_folder labels --seed 0 --split_name
+      train-test --split_percent 10 --data_path $dir; done
+    deps:
+    - path: src/train/split_datasets.py
+      hash: md5
+      md5: 16a437f71d3d6fe94a3a67af9224e88b
+      size: 14467
+    - path: train_dataset/data
+      hash: md5
+      md5: 5619a108fc12997ee36a50d0849249d2.dir
+      size: 1158872775
+      nfiles: 3068
+    params:
+      params.yaml:
+        random_seed: 0
+        split_data:
+          data_source_path: train_dataset/data/*
+          labels_dir: labels
+          images_dir: images
+          target_path: train_dataset
+          split_percent: 10
+          split_name: train-test
+    outs:
+    - path: train_dataset/test_images.txt
+      hash: md5
+      md5: 2a5f5850e4586bd3fc485c4ff69ba6c2
+      size: 17407
+    - path: train_dataset/test_labels.txt
+      hash: md5
+      md5: e3a8410250054d32eca3952610f3ae53
+      size: 17407
+    - path: train_dataset/train_images.txt
+      hash: md5
+      md5: 74f097c55a755dcbae7e8639b32de987
+      size: 191197
+    - path: train_dataset/train_labels.txt
+      hash: md5
+      md5: 44ec2c633738aeaaf2d124f09ca5aa64
+      size: 191197
+  tile_data:
+    cmd: python3 src/image_processing/BboxPreprocessing.py --params_file "params.yaml"  --workers=8
+      --log='INFO'
+    deps:
+    - path: src/image_processing/BboxPreprocessing.py
+      hash: md5
+      md5: 871557f4cee462f22f27c790d607b438
+      size: 31908
+    - path: train_dataset/train_images.txt
+      hash: md5
+      md5: 74f097c55a755dcbae7e8639b32de987
+      size: 191197
+    - path: train_dataset/train_labels.txt
+      hash: md5
+      md5: 44ec2c633738aeaaf2d124f09ca5aa64
+      size: 191197
+    outs:
+    - path: train_dataset/train/images
+      hash: md5
+      md5: 0cc074ea13a7b0b961760f446e41c132.dir
+      size: 4182886623
+      nfiles: 15055
+    - path: train_dataset/train/labels
+      hash: md5
+      md5: ddfaf294ce9c09ed7d67e4a537644f22.dir
+      size: 1472691
+      nfiles: 15055
+  validation_split:
+    cmd: python3 src/train/split_datasets.py --data_path=train_dataset/train --target_path=train_dataset/train
+      --images_folder=images --labels_folder=labels --seed=0 --split_name=train_tile-validation_tile
+      --split_percent=10
+    deps:
+    - path: src/train/split_datasets.py
+      hash: md5
+      md5: 16a437f71d3d6fe94a3a67af9224e88b
+      size: 14467
+    - path: train_dataset/train/images
+      hash: md5
+      md5: 0cc074ea13a7b0b961760f446e41c132.dir
+      size: 4182886623
+      nfiles: 15055
+    - path: train_dataset/train/labels
+      hash: md5
+      md5: ddfaf294ce9c09ed7d67e4a537644f22.dir
+      size: 1472691
+      nfiles: 15055
+    params:
+      params.yaml:
+        preprocessing:
+          images_path: train_dataset/train_images.txt
+          labels_path: train_dataset/train_labels.txt
+          labels_format: yolo
+          save_path: train_dataset/train
+          save_format: .jpg
+          padding: true
+          pad_color:
+          - 0
+          - 0
+          - 0
+          select_classes: 0,1,2,3,4,5
+          new_class_labels:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          balance_data: false
+          read_resolution: false
+          multichannel: false
+          bbox_resolution:
+          - 1.0
+          - 1.0
+          merge_channels: false
+          n_layers: 1
+        split_data:
+          data_source_path: train_dataset/data/*
+          labels_dir: labels
+          images_dir: images
+          target_path: train_dataset
+          split_percent: 10
+          split_name: train-test
+        validation_split:
+          data_path: train_dataset/train
+          split_percent: 10
+          split_name: train_tile-validation_tile
+          balance_val: true
+    outs:
+    - path: train_dataset/train/train_tile_images.txt
+      hash: md5
+      md5: 3a050f8e2ae1fa6523d3f8744778db24
+      size: 1287477
+    - path: train_dataset/train/validation_tile_images.txt
+      hash: md5
+      md5: 25196a1a63435c2051e861c63f03374d
+      size: 142681
+  train:
+    cmd: python3 -V && python3 src/train/set_dataset_path.py --dataset_file train_dataset.yaml
+      && python3 src/train/train.py --params_file "params.yaml" --params "train"
+    deps:
+    - path: train_dataset/train/images
+      hash: md5
+      md5: 0cc074ea13a7b0b961760f446e41c132.dir
+      size: 4182886623
+      nfiles: 15055
+    - path: train_dataset/train/labels
+      hash: md5
+      md5: ddfaf294ce9c09ed7d67e4a537644f22.dir
+      size: 1472691
+      nfiles: 15055
+    - path: train_dataset/train/train_tile_images.txt
+      hash: md5
+      md5: 3a050f8e2ae1fa6523d3f8744778db24
+      size: 1287477
+    - path: train_dataset/train/train_tile_images.txt
+      hash: md5
+      md5: 3a050f8e2ae1fa6523d3f8744778db24
+      size: 1287477
+    - path: train_dataset/train/validation_tile_images.txt
+      hash: md5
+      md5: 25196a1a63435c2051e861c63f03374d
+      size: 142681
+    - path: train_dataset/train/validation_tile_images.txt
+      hash: md5
+      md5: 25196a1a63435c2051e861c63f03374d
+      size: 142681
+    params:
+      params.yaml:
+        train:
+          img_size: 640
+          batch: 30
+          epochs: 100
+          optimizer: AdamW
+          workers: 4
+          save_path: yoloworldm
+          task: train
+          data: train_dataset.yaml
+          weights: yolov8m-worldv2
+          device: 0
+    outs:
+    - path: runs/detect/yoloworldm/train/F1_curve.png
+      hash: md5
+      md5: d46469080c3027e5715f4255caff7f80
+      size: 258463
+    - path: runs/detect/yoloworldm/train/confusion_matrix.png
+      hash: md5
+      md5: 1f80f74e800279aa721d5a0382869200
+      size: 145063
+    - path: runs/detect/yoloworldm/train/labels.jpg
+      hash: md5
+      md5: e60233af3df6e65ceaa2d4b26aff0bfb
+      size: 185291
+    - path: runs/detect/yoloworldm/train/results.csv
+      hash: md5
+      md5: 787d7bc99e21c5921d82eaaf17d8fdd8
+      size: 33936
+  training_report:
+    cmd: src/create_report.sh
+    deps:
+    - path: results/test/F1_curve.png
+      hash: md5
+      md5: 0f84bfcce3906478bf206608f6ca5844
+      size: 270512
+    - path: results/test/confusion_matrix.png
+      hash: md5
+      md5: 73520c9f6b8281c53f08b808ba53ef84
+      size: 142774
+    - path: results/test/results.html
+      hash: md5
+      md5: feb5e38c256b0fd5dfc396b27e3c7fb3
+      size: 1548
+    - path: results/train/results.csv
+      hash: md5
+      md5: af4e8164b318c239778e12a52c757ca3
+      size: 55146
+    - path: results/train/weights
+      hash: md5
+      md5: ca53d24e7aedb2456a706cfa788b1269.dir
+      size: 8503120
+      nfiles: 2
+    - path: src/create_report.sh
+      hash: md5
+      md5: 8612f0f16f5583e0285d8107e9ba389a
+      size: 3330
+    - path: src/train/save_best_metrics.py
+      hash: md5
+      md5: 04b38b84ccb63414b537c7eb5fd19a08
+      size: 2580
+    outs:
+    - path: report.md
+      hash: md5
+      md5: cd7dc6ee926239201eda632a5356b767
+      size: 15192
+    - path: results/metrics/train_metrics.json
+      hash: md5
+      md5: b608f9ec841774291ddcfa3ab90807ae
+      size: 688
+    - path: results/train/model.pt.url
+      hash: md5
+      md5: a800dd663729b7bf78dc4297e29a4a0b
+      size: 81
+    - path: results/train/model.version
+      hash: md5
+      md5: 3c522771af4bd28d8d64b488ea64eb41
+      size: 23
+  test_inference:
+    cmd: src/test.sh && src/predict.sh
+    deps:
+    - path: results/train/model.pt.url
+      hash: md5
+      md5: 35e9dbfd5e4f349a31afda1e3c5e5a89
+      size: 81
+    - path: results/train/model.version
+      hash: md5
+      md5: 5595d71f438b9ff4e3f71a1766c0b944
+      size: 23
+    - path: results/train/weights
+      hash: md5
+      md5: 9b4b6f590109beb41edea2f35a514971.dir
+      size: 7849808
+      nfiles: 2
+    - path: src/image_processing/BboxPreprocessing.py
+      hash: md5
+      md5: 7ae30591a8e06e48ff91483b1e09eb9b
+      size: 31614
+    - path: src/image_processing/ImageTiler.py
+      hash: md5
+      md5: 2a559ffa70442d860cdf290f17184676
+      size: 14808
+    - path: src/inference/inference.py
+      hash: md5
+      md5: eb00f1ab9e06472d35d48edeae895c9c
+      size: 5509
+    - path: src/inference/results_utils.py
+      hash: md5
+      md5: cadfaacc713ed09a5339b532b1124d79
+      size: 3758
+    - path: src/predict.sh
+      hash: md5
+      md5: c7210ae8dd17869d0c661ee35452a631
+      size: 470
+      isexec: true
+    - path: src/test.sh
+      hash: md5
+      md5: 7e7939fa05f8f77f04ea98e4857a4585
+      size: 1292
+      isexec: true
+    - path: train_dataset/test_images.txt
+      hash: md5
+      md5: 68f0be9a01712293ede42628cf3d0ab1
+      size: 2681
+    - path: train_dataset/test_labels.txt
+      hash: md5
+      md5: 644b46ebe83ad77cef99c1268619d96e
+      size: 2676
+    params:
+      params.yaml:
+        inference:
+          weights_path: results/train/weights/best.pt
+          img_size: 2048
+          save_path: results/inference
+          save_crop: false
+          nms_thresh: 0.1
+          max_detect: 100
+          summary: false
+          device: ''
+        test_data:
+          images_path: train_dataset/test_images.txt
+          labels_path: train_dataset/test_labels.txt
+          labels_format: yolo
+          save_path: train_dataset/test
+          labels_dir: labels
+          images_dir: images
+          tile_size:
+          - 2048
+          - 2048
+          tile_stride:
+          - 1024
+          - 1024
+          select_classes: 0,1,2,3,4,5
+          pad_borders: true
+          target_path: train_dataset/inference
+    outs:
+    - path: results/inference
+      hash: md5
+      md5: de20dc4e51504913cf67d315169450f0.dir
+      size: 749493152
+      nfiles: 58
+    - path: results/metrics/test_metrics.json
+      hash: md5
+      md5: 0bb83ced4604df8c41edfa22e8763cc1
+      size: 145
+    - path: results/test/F1_curve.png
+      hash: md5
+      md5: 282b2ecec926c219301e4213e38f7041
+      size: 91451
+    - path: results/test/confusion_matrix.png
+      hash: md5
+      md5: 94c2948948f9043c1f23da06c632b03a
+      size: 111407
+    - path: results/test/results.html
+      hash: md5
+      md5: ef19c0dddce0de7fc362a06d107c2091
+      size: 1547
+  visualize_labels:
+    cmd: src/visualize_labels.sh
+    deps:
+    - path: src/visualize_labels.sh
+      hash: md5
+      md5: 66ad2eb931ac13890dacec3c99d827f5
+      size: 383
+      isexec: true
+    - path: train_dataset/train/images
+      hash: md5
+      md5: 663b07d3186da333a5fe4241a04cf086.dir
+      size: 1937573239
+      nfiles: 2211
+    outs:
+    - path: results/visualize_labels
+      hash: md5
+      md5: e78e7c89e1943866e274a57f4a3071c0.dir
+      size: 13653435984
+      nfiles: 2211
+  test@$(find train_dataset/data/* -maxdepth 0 -mindepth 0 -type d):
+    cmd: for dir in $(find train_dataset/data/* -maxdepth 0 -mindepth 0 -type d);
+      do echo $dir; done
+  test:
+    cmd: python3 src/image_processing/BboxPreprocessing.py --params_file "params.yaml"
+      --params "test_data" --workers=8 && python3 src/train/val.py --params_file "params.yaml"
+      --params "test_data"
+    deps:
+    - path: runs/detect/yoloworldm/train/F1_curve.png
+      hash: md5
+      md5: d46469080c3027e5715f4255caff7f80
+      size: 258463
+    - path: runs/detect/yoloworldm/train/confusion_matrix.png
+      hash: md5
+      md5: 1f80f74e800279aa721d5a0382869200
+      size: 145063
+    - path: runs/detect/yoloworldm/train/labels.jpg
+      hash: md5
+      md5: e60233af3df6e65ceaa2d4b26aff0bfb
+      size: 185291
+    - path: runs/detect/yoloworldm/train/weights
+      hash: md5
+      md5: 3c0d464d9aff61379f945f470e74f01a.dir
+      size: 114227006
+      nfiles: 2
+    - path: src/image_processing/BboxPreprocessing.py
+      hash: md5
+      md5: 871557f4cee462f22f27c790d607b438
+      size: 31908
+    - path: train_dataset/test_images.txt
+      hash: md5
+      md5: 2a5f5850e4586bd3fc485c4ff69ba6c2
+      size: 17407
+    - path: train_dataset/test_labels.txt
+      hash: md5
+      md5: e3a8410250054d32eca3952610f3ae53
+      size: 17407
+    params:
+      params.yaml:
+        test_data:
+          images_path: train_dataset/test_images.txt
+          labels_path: train_dataset/test_labels.txt
+          weights_path: train/weights/best.pt
+          save_path: train_dataset/test
+          task: test
+          exist: true
+        train:
+          img_size: 640
+          batch: 30
+          epochs: 100
+          optimizer: AdamW
+          workers: 4
+          save_path: yoloworldm
+          task: train
+          data: train_dataset.yaml
+          weights: yolov8m-worldv2
+          device: 0
+    outs:
+    - path: runs/detect/yoloworldm/test/F1_curve.png
+      hash: md5
+      md5: 75deff9c0be4384b02a1057e752e7e6b
+      size: 215934
+    - path: runs/detect/yoloworldm/test/confusion_matrix.png
+      hash: md5
+      md5: 2ee42d6f5f182f17fbf6667c518cc24e
+      size: 142035
+    - path: runs/detect/yoloworldm/test/test_metrics.json
+      hash: md5
+      md5: ec1d8415755afc9ebb0588e1e3aa8863
+      size: 175
+  inference:
+    cmd: CUDA_VISIBLE_DEVICES=cpu python3 src/inference/inference.py --params "params.yaml"
+      --images_path train_dataset/train_images.txt
+    deps:
+    - path: runs/detect/yoloworldm/test/F1_curve.png
+      hash: md5
+      md5: 75deff9c0be4384b02a1057e752e7e6b
+      size: 215934
+    - path: runs/detect/yoloworldm/test/confusion_matrix.png
+      hash: md5
+      md5: 2ee42d6f5f182f17fbf6667c518cc24e
+      size: 142035
+    - path: src/image_processing/BboxPreprocessing.py
+      hash: md5
+      md5: 871557f4cee462f22f27c790d607b438
+      size: 31908
+    - path: src/image_processing/ImageTiler.py
+      hash: md5
+      md5: 2a559ffa70442d860cdf290f17184676
+      size: 14808
+    - path: src/inference/inference.py
+      hash: md5
+      md5: 18c4474e90738ec827e01cb9d2b76bf2
+      size: 6043
+    - path: src/inference/results_utils.py
+      hash: md5
+      md5: 2c254b295fdc8dbc0fbe5f9735a7ffca
+      size: 4727
+    - path: train_dataset/test_images.txt
+      hash: md5
+      md5: 2a5f5850e4586bd3fc485c4ff69ba6c2
+      size: 17407
+    - path: train_dataset/test_labels.txt
+      hash: md5
+      md5: e3a8410250054d32eca3952610f3ae53
+      size: 17407
+    params:
+      params.yaml:
+        inference:
+          save_crop: false
+          nms_thresh: 0.1
+          conf_thres: 0.25
+          summary: true
+          device: cpu
+          target_path: train_dataset/inference
+        preprocessing:
+          images_path: train_dataset/train_images.txt
+          labels_path: train_dataset/train_labels.txt
+          labels_format: yolo
+          save_path: train_dataset/train
+          save_format: .jpg
+          padding: true
+          pad_color:
+          - 0
+          - 0
+          - 0
+          select_classes: 0,1,2,3,4,5
+          new_class_labels:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          balance_data: false
+          read_resolution: false
+          multichannel: false
+          bbox_resolution:
+          - 1.0
+          - 1.0
+          merge_channels: false
+          n_layers: 1
+    outs:
+    - path: runs/detect/yoloworldm/inference
+      hash: md5
+      md5: 244a9411ee63022b1b3a640e110824be.dir
+      size: 307512766
+      nfiles: 384

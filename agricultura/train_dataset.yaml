@@ -1,0 +1,12 @@
+path: /data2/projects/Comparison_object_detection/crop_counting_yolo_ultralytics/train_dataset
+train: train/train_tile_images.txt
+val: train/validation_tile_images.txt
+test: test
+nc: 6
+names:
+- BRSNN
+- GLXMA
+- GOSHI
+- HELAN
+- LACSA
+- ZEAMX

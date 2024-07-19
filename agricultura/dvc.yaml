@@ -1,0 +1,126 @@
+stages:
+  resize_dataset:
+    cmd: python3 src/image_processing/ImageLoader.py  --images_path ${data.dataset_path} --target_path ${data.target_path} --max_size ${data.max_image_size}  &&
+         python3 src/utils/copy_data_collections.py --dataset_path ${data.dataset_path} --target_path ${data.target_path} --subfolder "labels"
+    params:
+      - data
+    deps:
+      - ${data.dataset_path}
+      - src/utils/copy_data_collections.py
+      - src/image_processing/ImageLoader.py
+    outs:
+      - ${data.target_path}
+
+  split_dataset:
+    cmd: for dir in `find ${split_data.data_source_path} -maxdepth 1 -mindepth 1 -type d`;
+     do echo "Splitting trial - $dir";
+     python3 src/train/split_datasets.py 
+          --target_path ${split_data.target_path} 
+          --images_folder ${split_data.images_dir} 
+          --labels_folder ${split_data.labels_dir} 
+          --seed ${random_seed} 
+          --split_name ${split_data.split_name} 
+          --split_percent ${split_data.split_percent} 
+          --data_path $dir; 
+      done
+    params:
+      - split_data
+      - random_seed
+    deps:
+      - ${data.target_path}
+      - src/train/split_datasets.py
+    outs:
+      - ${split_data.target_path}/train_images.txt
+      - ${split_data.target_path}/test_images.txt
+      - ${split_data.target_path}/train_labels.txt
+      - ${split_data.target_path}/test_labels.txt
+
+
+  tile_data:
+    cmd: python3 src/image_processing/BboxPreprocessing.py --params_file "params.yaml"  --workers=8 --log='INFO'
+    deps:
+      - ${split_data.target_path}/train_images.txt
+      - ${split_data.target_path}/train_labels.txt
+      - src/image_processing/BboxPreprocessing.py
+    outs:
+      - ${preprocessing.save_path}/images
+      - ${preprocessing.save_path}/labels
+
+  validation_split:
+    cmd: python3 src/train/split_datasets.py --data_path=${validation_split.data_path}
+         --target_path=${preprocessing.save_path}
+         --images_folder=${split_data.images_dir} 
+         --labels_folder=${split_data.labels_dir}
+         --seed=${random_seed}
+         --split_name=${validation_split.split_name}
+         --split_percent=${validation_split.split_percent}
+    params:
+      - validation_split
+      - split_data
+      - preprocessing
+    deps:
+      - ${preprocessing.save_path}/images
+      - ${preprocessing.save_path}/labels
+      - src/train/split_datasets.py
+    outs:
+      - ${preprocessing.save_path}/train_tile_images.txt
+      - ${preprocessing.save_path}/validation_tile_images.txt
+
+  train:
+    cmd: python3 -V &&
+         python3 src/train/set_dataset_path.py --dataset_file ${train.data} &&
+         python3 src/train/train.py --params_file "params.yaml" --params "train"
+         
+    params:
+      - train
+    deps:
+      - ${preprocessing.save_path}/images
+      - ${preprocessing.save_path}/labels
+      - ${preprocessing.save_path}/train_tile_images.txt
+      - ${preprocessing.save_path}/validation_tile_images.txt
+      - ${preprocessing.save_path}/train_tile_images.txt
+      - ${preprocessing.save_path}/validation_tile_images.txt
+    outs:
+      - runs/detect/${train.save_path}/${train.task}/labels.jpg
+      - runs/detect/${train.save_path}/${train.task}/F1_curve.png
+      - runs/detect/${train.save_path}/${train.task}/confusion_matrix.png
+    plots:
+      - runs/detect/${train.save_path}/${train.task}/results.csv
+  test:
+    cmd: python3 src/image_processing/BboxPreprocessing.py --params_file "params.yaml" --params "test_data" --workers=8 &&
+         python3 src/train/val.py --params_file "params.yaml" --params "test_data"
+    params:
+      - test_data
+      - train
+    deps:
+      - runs/detect/${train.save_path}/${train.task}/weights
+      - src/image_processing/BboxPreprocessing.py
+      - ${split_data.target_path}/test_images.txt
+      - ${split_data.target_path}/test_labels.txt
+      - runs/detect/${train.save_path}/${train.task}/labels.jpg
+      - runs/detect/${train.save_path}/${train.task}/F1_curve.png
+      - runs/detect/${train.save_path}/${train.task}/confusion_matrix.png
+    outs:
+      - runs/detect/${train.save_path}/${test_data.task}/F1_curve.png
+      - runs/detect/${train.save_path}/${test_data.task}/confusion_matrix.png
+    metrics:
+      - runs/detect/${train.save_path}/${test_data.task}/test_metrics.json
+      
+
+  inference:
+    cmd: CUDA_VISIBLE_DEVICES=${inference.device} python3 src/inference/inference.py --params "params.yaml" --images_path ${ preprocessing.images_path}
+    params:
+      - inference
+      - preprocessing
+    deps:
+      - src/image_processing/BboxPreprocessing.py
+      - src/inference/inference.py
+      - src/inference/results_utils.py
+      - src/image_processing/ImageTiler.py
+      - ${split_data.target_path}/test_images.txt
+      - ${split_data.target_path}/test_labels.txt
+      - runs/detect/${train.save_path}/test/F1_curve.png
+      - runs/detect/${train.save_path}/test/confusion_matrix.png
+
+    outs:
+      - runs/detect/${train.save_path}/inference

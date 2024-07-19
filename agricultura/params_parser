@@ -1,0 +1,3 @@
+#!/bin/bash
+python3 -m yq -r .$1 params.yaml
+

@@ -1,0 +1,71 @@
+version: "1.0.0"
+random_seed: 0
+
+data:
+    dataset_path: "dataset"
+    target_path: "train_dataset/data"
+    max_image_size: 1250 # 5000
+    tile_size: [640,640] #[2048, 2048]
+    tile_stride: [320,320] #[1024,1024]
+    pad_borders: True
+
+split_data:
+    data_source_path: "train_dataset/data/*"
+    labels_dir: "labels"
+    images_dir: "images"
+    target_path: "train_dataset"
+    split_percent: 10
+    split_name: "train-test"
+
+preprocessing:
+    images_path: "train_dataset/train_images.txt"
+    labels_path: "train_dataset/train_labels.txt"
+    labels_format: "yolo"
+    save_path: "train_dataset/train"
+    save_format: ".jpg"
+    padding: True
+    pad_color: [0,0,0] # Pad color to [R,G,B] values (0-255)
+    select_classes: "0,1,2,3,4,5"
+    new_class_labels: [0,1,2,3,4,5]
+    balance_data: False
+    read_resolution: False
+    multichannel: False
+    bbox_resolution: [1.0, 1.0]
+    merge_channels: False
+    n_layers: 1
+
+validation_split:
+    data_path: "train_dataset/train"
+    split_percent: 10
+    split_name: "train_tile-validation_tile"
+    balance_val: True
+
+train:
+    img_size: 640
+    batch: 30 #probably more?
+    epochs: 100
+    optimizer: "AdamW"
+    workers: 4 
+    save_path: "yolov5-2" #yolo name
+    task: "train"
+    data: "train_dataset.yaml"
+    weights: "yolov5n.pt" # yolo name
+    device: 0 # GPU: 0,1  or cpu
+
+
+test_data:
+    images_path: "train_dataset/test_images.txt"
+    labels_path: "train_dataset/test_labels.txt"
+    weights_path: "train/weights/best.pt" # Yolo name
+    save_path: "train_dataset/test"
+    task: "test"
+    exist: True
+
+inference:
+    save_crop: False
+    nms_thresh: 0.10
+    conf_thres: 0.25
+    summary: True
+    device: "cpu" # GPU: 0,1 or "cpu" for cpu
+    target_path: "train_dataset/inference"
+
